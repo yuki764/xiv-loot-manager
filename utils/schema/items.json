@@ -1,0 +1,14 @@
+[
+	{
+		"name": "item",
+		"mode": "REQUIRED",
+		"type": "STRING",
+		"fields": []
+	},
+	{
+		"name": "alias",
+		"mode": "REQUIRED",
+		"type": "STRING",
+		"fields": []
+	}
+]

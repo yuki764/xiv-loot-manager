@@ -1,0 +1,14 @@
+[
+	{
+		"name": "player",
+		"mode": "REQUIRED",
+		"type": "STRING",
+		"fields": []
+	},
+	{
+		"name": "nickname",
+		"mode": "REQUIRED",
+		"type": "STRING",
+	  "fields": []
+	}
+]

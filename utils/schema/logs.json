@@ -1,0 +1,26 @@
+[
+	{
+		"name": "id",
+		"mode": "REQUIRED",
+		"type": "STRING",
+		"fields": []
+	},
+	{
+		"name": "timestamp",
+		"mode": "REQUIRED",
+		"type": "TIMESTAMP",
+		"fields": []
+	},
+	{
+		"name": "player",
+		"mode": "REQUIRED",
+		"type": "STRING",
+		"fields": []
+	},
+	{
+		"name": "item",
+		"mode": "REQUIRED",
+		"type": "STRING",
+		"fields": []
+	}
+]
