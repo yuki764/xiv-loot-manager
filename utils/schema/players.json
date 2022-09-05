@@ -9,6 +9,6 @@
 		"name": "nickname",
 		"mode": "REQUIRED",
 		"type": "STRING",
-	  "fields": []
+		"fields": []
 	}
 ]
