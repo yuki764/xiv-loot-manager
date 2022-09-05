@@ -85,21 +85,24 @@ func checkDistribution(w http.ResponseWriter, r *http.Request) {
 		logger.Info("check candidates for " + l)
 
 		q := client.Query(`
-WITH result AS (
-	WITH lootCount AS (
-		SELECT
+WITH lootCount AS (
+	SELECT
 		player,
-		COUNT(*) OVER (PARTITION BY player) AS count
-		FROM ` + "`" + lootTableName + "`" + ` AS loots
+		nickname,
+		ifnull(count, 0) AS count,
+	FROM ` + "`" + playerTableName + "`" + `
+	LEFT OUTER JOIN (
+		SELECT
+			player,
+			COUNT(*) OVER (PARTITION BY player) AS count,
+		FROM ` + "`" + lootTableName + "`" + `
 		WHERE item = "` + l + `"
-	)
-	SELECT playerInfo.player, playerInfo.nickname AS nickname, ifnull(lootCount.count, 0) AS count
-	FROM lootCount RIGHT OUTER JOIN ` + "`" + playerTableName + "`" + ` AS playerInfo ON lootCount.player = playerInfo.player
+	) USING (player)
 )
 SELECT nickname
-FROM result
-WHERE count = (SELECT MIN(count) from result)
-		`)
+FROM lootCount
+WHERE count = (SELECT MIN(count) from lootCount)
+`)
 
 		it, err := q.Read(ctx)
 		if err != nil {
