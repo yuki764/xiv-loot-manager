@@ -17,7 +17,7 @@ textarea {
 <p><a href="/">フォームに戻る</a></p>
 
 {{ range .obtain }}
-<p> {{ .Player }} <- {{ .Item }}
+<p>{{ .Player }} <- {{ .Item }}</p>
 {{ end }}
 
 <form method="post" action="obtain/submit">

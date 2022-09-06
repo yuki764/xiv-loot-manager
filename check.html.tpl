@@ -15,7 +15,7 @@ div.container {
 <p>{{ $loot }}
 <ul>
 {{ range $players }}
-<li>{{ . }}
+<li>{{ . }}</li>
 {{ end }}
 </ul>
 </p>
