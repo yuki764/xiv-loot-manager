@@ -11,9 +11,16 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
+
+// global variables
+var projectID string
+var lootTableName string
+var playerTableName string
+var bestgearTableName string
 
 func inputForm(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
@@ -21,24 +28,22 @@ func inputForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger, err := zap.NewProduction()
-	if err != nil {
-		panic(err)
-	}
-	defer logger.Sync()
-
 	title := os.Getenv("TITLE")
 	if title == "" {
 		title = "FFXIV ロット管理"
 	}
 	tpl, err := template.ParseFiles("input-form.html.tpl")
 	if err != nil {
-		logger.Fatal(err.Error())
+		zap.L().Error(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	if err := tpl.Execute(w, map[string]interface{}{
 		"title": title,
 	}); err != nil {
-		logger.Fatal(err.Error())
+		zap.L().Error(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -47,12 +52,6 @@ func checkDistribution(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-
-	logger, err := zap.NewProduction()
-	if err != nil {
-		panic(err)
-	}
-	defer logger.Sync()
 
 	// keywords
 	lootSuffix := "が戦利品に追加されました。"
@@ -69,22 +68,14 @@ func checkDistribution(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	projectID := os.Getenv("PROJECT_ID")
-	lootTableName := os.Getenv("BQ_TABLE_LOOT")
-	playerTableName := os.Getenv("BQ_TABLE_PLAYER")
-	bestgearTableName := os.Getenv("BQ_TABLE_BESTGEAR")
-	if projectID == "" || lootTableName == "" || playerTableName == "" || bestgearTableName == "" {
-		logger.Fatal("You MUST specify env PROJECT_ID, BQ_TABLE_LOOT, BQ_TABLE_PLAYER and BQ_TABLE_BESTGEAR.")
-	}
-
 	ctx := context.Background()
 	client, err := bigquery.NewClient(ctx, projectID, option.WithScopes(bigquery.Scope, "https://www.googleapis.com/auth/drive"))
 	if err != nil {
-		logger.Fatal(err.Error())
+		zap.L().Fatal(err.Error())
 	}
 
 	for _, l := range lootItems {
-		logger.Info("check candidates for " + l)
+		zap.L().Info("check candidates for " + l)
 
 		q := client.Query(`
 WITH lootCount AS (
@@ -111,7 +102,9 @@ WHERE count = (SELECT MIN(count) from lootCount)
 
 		it, err := q.Read(ctx)
 		if err != nil {
-			logger.Fatal(err.Error())
+			zap.L().Error(err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 
 		for {
@@ -121,7 +114,9 @@ WHERE count = (SELECT MIN(count) from lootCount)
 				break
 			}
 			if err != nil {
-				logger.Fatal(err.Error())
+				zap.L().Error(err.Error())
+				w.WriteHeader(http.StatusInternalServerError)
+				return
 			}
 			lootCandidates[l] = append(lootCandidates[l], player.Nickname)
 		}
@@ -129,12 +124,16 @@ WHERE count = (SELECT MIN(count) from lootCount)
 
 	tpl, err := template.ParseFiles("check.html.tpl")
 	if err != nil {
-		logger.Fatal(err.Error())
+		zap.L().Error(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	if err := tpl.Execute(w, map[string]interface{}{
 		"candidates": lootCandidates,
 	}); err != nil {
-		logger.Fatal(err.Error())
+		zap.L().Error(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -178,12 +177,16 @@ func confirmObtaining(w http.ResponseWriter, r *http.Request) {
 
 	tpl, err := template.ParseFiles("obtain.html.tpl")
 	if err != nil {
-		logger.Fatal(err.Error())
+		zap.L().Error(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	if err := tpl.Execute(w, map[string]interface{}{
 		"obtain": obtain,
 	}); err != nil {
-		logger.Fatal(err.Error())
+		zap.L().Error(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -193,47 +196,78 @@ func submitObtaining(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger, err := zap.NewProduction()
-	if err != nil {
-		panic(err)
-	}
-	defer logger.Sync()
-
-	projectID := os.Getenv("PROJECT_ID")
-	lootTableName := os.Getenv("BQ_TABLE_LOOT")
-	playerTableName := os.Getenv("BQ_TABLE_PLAYER")
-	if projectID == "" || lootTableName == "" || playerTableName == "" {
-		logger.Fatal("You MUST specify env PROJECT_ID, BQ_TABLE_LOOT and BQ_TABLE_PLAYER.")
-	}
-
-	tpl, err := template.ParseFiles("blank.html.tpl")
-	if err != nil {
-		logger.Fatal(err.Error())
-	}
-	if err := tpl.Execute(w, map[string]interface{}{}); err != nil {
-		logger.Fatal(err.Error())
-	}
-
 	ctx := context.Background()
 	client, err := bigquery.NewClient(ctx, projectID)
 	if err != nil {
-		logger.Fatal(err.Error())
+		zap.L().Error(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	q := client.Query(strings.ReplaceAll(r.PostFormValue("sql"), "TABLE_NAME", lootTableName))
 	job, err := q.Run(ctx)
 	if err != nil {
-		logger.Fatal(err.Error())
+		zap.L().Error(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	logger.Info("submitted obtaining logs. job ID: " + job.ID())
+	zap.L().Info("submitted obtaining logs. job ID: " + job.ID())
+
+	tpl, err := template.ParseFiles("blank.html.tpl")
+	if err != nil {
+		zap.L().Error(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if err := tpl.Execute(w, map[string]interface{}{}); err != nil {
+		zap.L().Error(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 }
 
 func main() {
-	logger, err := zap.NewProduction()
+	// initiazize logger
+	logCfg := zap.NewProductionConfig()
+	logCfg.EncoderConfig.TimeKey = "time"
+	logCfg.EncoderConfig.LevelKey = "severity"
+	logCfg.EncoderConfig.MessageKey = "message"
+	logCfg.EncoderConfig.EncodeTime = zapcore.RFC3339NanoTimeEncoder
+	logCfg.EncoderConfig.EncodeLevel = func(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
+		switch l {
+		case zapcore.DebugLevel:
+			enc.AppendString("DEBUG")
+		case zapcore.InfoLevel:
+			enc.AppendString("INFO")
+		case zapcore.WarnLevel:
+			enc.AppendString("WARNING")
+		case zapcore.ErrorLevel:
+			enc.AppendString("ERROR")
+		case zapcore.DPanicLevel:
+			enc.AppendString("CRITICAL")
+		case zapcore.PanicLevel:
+			enc.AppendString("ALERT")
+		case zapcore.FatalLevel:
+			enc.AppendString("EMERGENCY")
+		}
+	}
+
+	logger, err := logCfg.Build()
 	if err != nil {
 		panic(err)
 	}
 	defer logger.Sync()
+	undo := zap.ReplaceGlobals(logger)
+	defer undo()
+
+	// initialize env variables
+	projectID = os.Getenv("PROJECT_ID")
+	lootTableName = os.Getenv("BQ_TABLE_LOOT")
+	playerTableName = os.Getenv("BQ_TABLE_PLAYER")
+	bestgearTableName = os.Getenv("BQ_TABLE_BESTGEAR")
+	if projectID == "" || lootTableName == "" || playerTableName == "" || bestgearTableName == "" {
+		zap.L().Fatal("You MUST specify env PROJECT_ID, BQ_TABLE_LOOT, BQ_TABLE_PLAYER and BQ_TABLE_BESTGEAR.")
+	}
 
 	http.HandleFunc("/", inputForm)
 	http.HandleFunc("/check", checkDistribution)
@@ -243,10 +277,9 @@ func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
-		logger.Info("defaulting to port " + port)
+		zap.L().Info("defaulting to port " + port)
 	}
 
-	// Start HTTP server.
-	logger.Info("listening on port " + port)
+	zap.L().Info("listening on port " + port)
 	http.ListenAndServe(":8080", nil)
 }
