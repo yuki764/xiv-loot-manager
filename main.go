@@ -54,6 +54,7 @@ func checkDistribution(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// keywords
+	// ref: example log is "[22:30] アビュッソス・イヤリングチェスト【ILv630】が戦利品に追加されました。"
 	lootSuffix := "が戦利品に追加されました。"
 	itemPrefix := '\ue0bb'
 
@@ -62,19 +63,24 @@ func checkDistribution(w http.ResponseWriter, r *http.Request) {
 
 	scanner := bufio.NewScanner(strings.NewReader(r.PostFormValue("log")))
 	for scanner.Scan() {
-		itemStartRune := strings.IndexRune(scanner.Text(), itemPrefix)
-		if strings.Index(scanner.Text(), lootSuffix) != -1 {
-			lootItems = append(lootItems, string([]rune(strings.TrimSuffix(scanner.Text(), lootSuffix))[itemStartRune+1:]))
+		line := scanner.Text()
+		itemStartRune := strings.IndexRune(line, itemPrefix)
+		if strings.Index(line, lootSuffix) != -1 {
+			// extract item name by trimming prefix and suffix
+			lootItems = append(lootItems, string([]rune(strings.TrimSuffix(line, lootSuffix))[itemStartRune+1:]))
 		}
 	}
 
 	ctx := context.Background()
 	client, err := bigquery.NewClient(ctx, projectID, option.WithScopes(bigquery.Scope, "https://www.googleapis.com/auth/drive"))
 	if err != nil {
-		zap.L().Fatal(err.Error())
+		zap.L().Error(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	for _, l := range lootItems {
+		// dedup
 		if _, ok := lootCandidates[l]; ok {
 			continue
 		}
@@ -126,6 +132,7 @@ WHERE count = (SELECT MIN(count) from lootCount)
 		}
 	}
 
+	// render html page
 	tpl, err := template.ParseFiles("check.html.tpl")
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -154,8 +161,9 @@ func confirmObtaining(w http.ResponseWriter, r *http.Request) {
 	defer logger.Sync()
 
 	// keywords
+	// ref: example log is "[0:05] Final Fantasyはアビュッソス・イヤリングチェスト【ILv630】を手に入れた。".
 	obtainSuffix := "を手に入れた。"
-	itemPrefix := '\ue0bb'
+	itemPrefix := 'は' // '\ue0bb' (='') does not work as expected. :thinking_face:
 
 	obtain := []struct {
 		Player string
@@ -166,19 +174,23 @@ func confirmObtaining(w http.ResponseWriter, r *http.Request) {
 
 	scanner := bufio.NewScanner(strings.NewReader(r.PostFormValue("log")))
 	for scanner.Scan() {
-		if strings.Index(scanner.Text(), obtainSuffix) != -1 {
-			itemStartRune := strings.IndexRune(scanner.Text(), itemPrefix)
+		line := scanner.Text()
+		if strings.Index(line, obtainSuffix) != -1 {
+			itemStartRune := strings.IndexRune(line, itemPrefix)
 
 			obtain = append(obtain, struct {
 				Player string
 				Item   string
 			}{
-				Player: re.FindStringSubmatch(scanner.Text())[1],
-				Item:   string([]rune(strings.TrimSuffix(scanner.Text(), obtainSuffix))[itemStartRune-1:]),
+				// extract player name from regexp
+				Player: re.FindStringSubmatch(line)[1],
+				// extract item name by trimming prefix and suffix
+				Item: string([]rune(strings.TrimSuffix(line, obtainSuffix))[itemStartRune+2:]),
 			})
 		}
 	}
 
+	// render html page
 	tpl, err := template.ParseFiles("obtain.html.tpl")
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -217,6 +229,7 @@ func submitObtaining(w http.ResponseWriter, r *http.Request) {
 	}
 	zap.L().Info("submitted obtaining logs. job ID: " + job.ID())
 
+	// render html page
 	tpl, err := template.ParseFiles("blank.html.tpl")
 	if err != nil {
 		zap.L().Error(err.Error())
