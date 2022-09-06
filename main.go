@@ -71,8 +71,9 @@ func checkDistribution(w http.ResponseWriter, r *http.Request) {
 	projectID := os.Getenv("PROJECT_ID")
 	lootTableName := os.Getenv("BQ_TABLE_LOOT")
 	playerTableName := os.Getenv("BQ_TABLE_PLAYER")
-	if projectID == "" || lootTableName == "" || playerTableName == "" {
-		logger.Fatal("You MUST specify env PROJECT_ID, BQ_TABLE_LOOT and BQ_TABLE_PLAYER.")
+	bestgearTableName := os.Getenv("BQ_TABLE_BESTGEAR")
+	if projectID == "" || lootTableName == "" || playerTableName == "" || bestgearTableName == "" {
+		logger.Fatal("You MUST specify env PROJECT_ID, BQ_TABLE_LOOT, BQ_TABLE_PLAYER and BQ_TABLE_BESTGEAR.")
 	}
 
 	ctx := context.Background()
@@ -89,15 +90,18 @@ WITH lootCount AS (
 	SELECT
 		player,
 		nickname,
-		ifnull(count, 0) AS count,
-	FROM ` + "`" + playerTableName + "`" + `
+		ifnull(count, priority) AS count,
+	FROM ` + "`" + bestgearTableName + "`" + `
+	LEFT OUTER JOIN ` + "`" + playerTableName + "`" + ` USING (player)
 	LEFT OUTER JOIN (
-		SELECT
+		SELECT DISTINCT
 			player,
-			COUNT(*) OVER (PARTITION BY player) AS count,
+			item,
+			COUNT(*) OVER (PARTITION BY player, item) AS count,
 		FROM ` + "`" + lootTableName + "`" + `
 		WHERE item = "` + l + `"
-	) USING (player)
+	) USING (player, item)
+	WHERE item = "` + l + `"
 )
 SELECT nickname
 FROM lootCount
@@ -221,7 +225,6 @@ func submitObtaining(w http.ResponseWriter, r *http.Request) {
 		logger.Fatal(err.Error())
 	}
 	logger.Info("submitted obtaining logs. job ID: " + job.ID())
-
 }
 
 func main() {
