@@ -12,6 +12,7 @@ import (
 	"cloud.google.com/go/bigquery"
 	"go.uber.org/zap"
 	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
 )
 
 func inputForm(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +78,7 @@ func checkDistribution(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := context.Background()
-	client, err := bigquery.NewClient(ctx, projectID)
+	client, err := bigquery.NewClient(ctx, projectID, option.WithScopes(bigquery.Scope, "https://www.googleapis.com/auth/drive"))
 	if err != nil {
 		logger.Fatal(err.Error())
 	}
