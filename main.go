@@ -75,6 +75,10 @@ func checkDistribution(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, l := range lootItems {
+		if _, ok := lootCandidates[l]; ok {
+			continue
+		}
+
 		zap.L().Info("check candidates for " + l)
 
 		q := client.Query(`
