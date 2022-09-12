@@ -89,12 +89,24 @@ func checkDistribution(w http.ResponseWriter, r *http.Request) {
 
 		q := client.Query(`
 WITH lootCount AS (
+	WITH priorityTable AS (
+		SELECT
+			player,
+			nickname,
+			ifnull(priority, 0) AS priority,
+		FROM ` + "`" + playerTableName + "`" + `
+		LEFT OUTER JOIN (
+			SELECT
+				*
+			FROM ` + "`" + bestgearTableName + "`" + `
+			WHERE item = "` + l + `"
+		) USING (player)
+	)
 	SELECT
 		player,
 		nickname,
 		ifnull(count, priority) AS count,
-	FROM ` + "`" + bestgearTableName + "`" + `
-	LEFT OUTER JOIN ` + "`" + playerTableName + "`" + ` USING (player)
+	FROM priorityTable
 	LEFT OUTER JOIN (
 		SELECT DISTINCT
 			player,
@@ -102,8 +114,7 @@ WITH lootCount AS (
 			COUNT(*) OVER (PARTITION BY player, item) AS count,
 		FROM ` + "`" + lootTableName + "`" + `
 		WHERE item = "` + l + `"
-	) USING (player, item)
-	WHERE item = "` + l + `"
+	) USING (player)
 )
 SELECT nickname
 FROM lootCount
